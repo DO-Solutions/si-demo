@@ -2,6 +2,8 @@
 
 A small browser demo for the DigitalOcean Inference API. Single Node.js server (no dependencies — stdlib only) plus a static HTML/JS frontend. Built for live walkthroughs of chat, multi-model comparison, routing, and image generation against `inference.do-ai.run`.
 
+![Serverless Inference tab](docs/si-demo.png)
+
 ## What it shows
 
 - **Single chat** — pick any model from the catalog and send an OpenAI-compatible chat request. Server-measured latency and token counts inline.
