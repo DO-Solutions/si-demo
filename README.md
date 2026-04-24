@@ -1,6 +1,6 @@
 # DO Inference Demo
 
-A small browser demo for the DigitalOcean Inference API. Single Node.js server (no dependencies — stdlib only) plus a static HTML/JS frontend. Built for live walkthroughs of chat, multi-model comparison, routing, and image generation against `inference.do-ai.run`.
+A simple browser demo of the DigitalOcean Inference API. Single Node.js server (no dependencies — stdlib only) plus a static HTML/JS frontend. Designed for live walkthroughs of chat, multi-model comparison, routing, and image generation against `inference.do-ai.run`.
 
 ![Serverless Inference tab](docs/si-demo.png)
 
