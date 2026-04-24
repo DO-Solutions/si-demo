@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DigitalOcean · Inference Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0b1220;
+    --ink-soft: #3a4152;
+    --muted: #7a8297;
+    --line: #e7eaf0;
+    --line-strong: #d6dbe5;
+    --bg: #ffffff;
+    --bg-soft: #f7f9fc;
+    --accent: #0069ff;
+    --accent-soft: #e7f0ff;
+    --accent-2: #00c39a;
+    --warn: #c07a00;
+    --err: #c2364d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--ink);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    font-feature-settings: "ss01","cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 36px;
+    border-bottom: 1px solid var(--line);
+  }
+  header .brand { display: flex; align-items: center; gap: 14px; font-size: 15px; letter-spacing: .01em; }
+  header .brand .do-logo { height: 28px; width: auto; display: block; }
+  header .brand .brand-sep { color: var(--line-strong); font-weight: 400; }
+  header .brand .brand-demo { color: var(--ink-soft); font-weight: 500; }
+  header .tag {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--muted); font-weight: 600;
+  }
+
+  .tabs {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 36px; border-bottom: 1px solid var(--line);
+  }
+  .tabs-left { display: flex; gap: 4px; }
+  .tab {
+    padding: 14px 18px; font-size: 14px; font-weight: 600; color: var(--muted);
+    border: none; background: transparent; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--ink-soft); }
+
+  .glossary-toggle {
+    background: transparent; border: 1px solid var(--line-strong);
+    padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    font: inherit; font-size: 12px; font-weight: 500; color: var(--ink-soft);
+    margin: 8px 0; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .glossary-toggle:hover { background: var(--bg-soft); color: var(--ink); border-color: var(--ink-soft); }
+
+  body { padding-right: 320px; transition: padding-right .25s ease; }
+
+  main { padding: 28px 36px 80px; max-width: 1400px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  aside.sidebar {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 320px;
+    background: var(--bg-soft);
+    border-left: 1px solid var(--line);
+    overflow-y: auto; overscroll-behavior: contain;
+    z-index: 15;
+    display: flex; flex-direction: column;
+  }
+  .sb-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .sb-header .sb-title {
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  .sb-header .sb-toggle {
+    background: transparent; border: 1px solid var(--line-strong);
+    width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+    color: var(--ink-soft); font-size: 14px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sb-header .sb-toggle:hover { background: var(--bg-soft); color: var(--ink); }
+
+  .sb-body { padding: 8px 18px 24px; }
+  .sb-intro {
+    font-size: 13px; line-height: 1.5; color: var(--ink-soft);
+    padding: 14px 4px 8px;
+  }
+
+  .sb-group-title {
+    font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+    margin: 18px 4px 8px;
+  }
+
+  .sb-term { padding: 10px 12px; border-radius: 8px; transition: background .15s; }
+  .sb-term:hover { background: white; }
+  .sb-term + .sb-term { margin-top: 2px; }
+  .sb-term dt {
+    font-size: 12.5px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .sb-term dt code {
+    font-size: 10.5px; padding: 1px 5px; background: var(--accent-soft);
+    color: var(--accent); border-radius: 4px; font-weight: 500;
+  }
+  .sb-term dd {
+    margin: 4px 0 0; font-size: 12px; line-height: 1.55; color: var(--ink-soft);
+  }
+  .sb-term dd strong { color: var(--ink); font-weight: 600; }
+  .sb-term dd code {
+    font-size: 11px; padding: 1px 4px; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 3px; color: var(--ink-soft);
+  }
+
+  body.sidebar-closed { padding-right: 0; }
+  body.sidebar-closed aside.sidebar { transform: translateX(100%); }
+  aside.sidebar { transition: transform .25s ease; }
+
+  @media (max-width: 1100px) {
+    body { padding-right: 0; }
+    aside.sidebar {
+      position: static; width: auto;
+      border-left: none; border-top: 1px solid var(--line);
+    }
+    .sb-header { position: static; }
+    .glossary-toggle { display: none; }
+  }
+
+  .eyebrow {
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; margin-bottom: 8px;
+  }
+  h1 {
+    font-size: 28px; font-weight: 700; margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; max-width: 720px; }
+
+  .grid {
+    display: grid; gap: 24px;
+    grid-template-columns: minmax(320px, 420px) 1fr;
+  }
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px;
+  }
+  .card h3 {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 14px; font-weight: 700;
+  }
+
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-soft); margin: 12px 0 6px; }
+  select, textarea, input[type="text"], input[type="number"] {
+    width: 100%; font: inherit; font-size: 14px;
+    padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--bg); color: var(--ink);
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  select:focus, textarea:focus, input:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  textarea { min-height: 120px; resize: vertical; font-family: inherit; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+
+  button.primary {
+    margin-top: 18px; width: 100%;
+    padding: 12px 16px; font: inherit; font-size: 14px; font-weight: 600;
+    background: var(--accent); color: white; border: none; border-radius: 10px;
+    cursor: pointer; transition: background .15s;
+  }
+  button.primary:hover { background: #0057d9; }
+  button.primary:disabled { background: var(--muted); cursor: not-allowed; }
+
+  .result {
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px; min-height: 260px;
+  }
+  .result .meta {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    font-size: 12px; color: var(--muted);
+    padding-bottom: 14px; border-bottom: 1px dashed var(--line-strong);
+    margin-bottom: 14px;
+  }
+  .result .meta strong { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .result .content {
+    font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .result.error .content { color: var(--err); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .placeholder { color: var(--muted); font-style: italic; }
+
+  .models-picker {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    max-height: 340px; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    background: var(--bg-soft);
+  }
+  .models-picker label {
+    display: flex; align-items: center; gap: 8px; margin: 0;
+    font-size: 12.5px; font-weight: 500; color: var(--ink);
+    padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  }
+  .models-picker label:hover { background: var(--accent-soft); }
+  .models-picker input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+
+  .compare-grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    margin-top: 20px;
+  }
+  .compare-card {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; display: flex; flex-direction: column; min-height: 200px;
+  }
+  .compare-card .model-name {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500;
+    color: var(--ink); padding: 4px 8px; background: var(--accent-soft);
+    border-radius: 6px; display: inline-block; width: fit-content; margin-bottom: 10px;
+  }
+  .compare-card .stats {
+    display: flex; gap: 14px; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums; margin-bottom: 10px;
+    padding-bottom: 10px; border-bottom: 1px dashed var(--line);
+  }
+  .compare-card .stats strong { color: var(--ink); font-weight: 600; font-size: 13px; }
+  .compare-card .body {
+    font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word;
+    flex: 1; color: var(--ink-soft);
+  }
+  .compare-card.error .body { color: var(--err); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .compare-card.winner { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2); }
+  .compare-card.winner .stats strong.lat { color: var(--accent-2); }
+
+  .loading {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid var(--line-strong); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite;
+    vertical-align: middle; margin-left: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hint {
+    font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5;
+  }
+  .hint code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
+  .prompt-preset {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+  }
+  .prompt-preset button {
+    font: inherit; font-size: 11px; padding: 4px 9px; border-radius: 20px;
+    background: var(--bg-soft); color: var(--ink-soft); border: 1px solid var(--line-strong);
+    cursor: pointer;
+  }
+  .prompt-preset button:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .prompt-preset button.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* Router tab */
+  .routed-to {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px; margin: -20px -20px 14px;
+    background: linear-gradient(90deg, var(--accent-soft), #f4f8ff);
+    border-radius: 14px 14px 0 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .rt-label {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  .rt-model {
+    font-size: 13.5px; font-weight: 600; color: var(--ink);
+    padding: 3px 10px; background: white; border: 1px solid var(--accent);
+    border-radius: 6px;
+  }
+  .rt-expected {
+    margin-left: auto; font-size: 11px; color: var(--muted);
+  }
+  .rt-expected strong { color: var(--ink-soft); font-weight: 600; }
+
+  .router-history {
+    margin-top: 20px; padding: 16px 18px;
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .rh-title {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; margin-bottom: 10px;
+  }
+  .rh-list { display: flex; flex-direction: column; gap: 6px; }
+  .rh-item {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+    font-size: 12.5px; padding: 8px 10px; background: white;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  .rh-item .rh-task { font-weight: 600; color: var(--ink); min-width: 90px; }
+  .rh-item .rh-model {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--accent);
+    background: var(--accent-soft); padding: 2px 8px; border-radius: 5px;
+  }
+  .rh-item .rh-stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+
+  /* Image tab */
+  .image-result { min-height: 360px; }
+  .image-output {
+    display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-top: 6px;
+  }
+  .image-output .placeholder {
+    grid-column: 1 / -1;
+    padding: 80px 20px; text-align: center;
+    background: var(--bg); border: 1px dashed var(--line-strong); border-radius: 10px;
+  }
+  .img-card {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .img-card img { width: 100%; height: auto; display: block; }
+  .img-card .img-actions {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; font-size: 11px; color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+  .img-card .img-actions a {
+    color: var(--accent); text-decoration: none; font-weight: 600;
+  }
+  .img-card .img-actions a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <img class="do-logo" src="/assets/digitalocean-logo.svg" alt="DigitalOcean" onerror="this.onerror=null;this.src='/assets/digitalocean-logo.png';" />
+    <span class="brand-sep">·</span>
+    <span class="brand-demo">Inference Demo</span>
+  </div>
+  <div class="tag" data-cfg="inferenceHost">—</div>
+</header>
+
+<div class="tabs">
+  <div class="tabs-left">
+    <button class="tab active" data-panel="single">Serverless Inference</button>
+    <button class="tab" data-panel="compare">Compare</button>
+    <button class="tab" data-panel="router">Router</button>
+    <button class="tab" data-panel="image">Images</button>
+  </div>
+  <button class="glossary-toggle" id="glossary-toggle" aria-pressed="true">
+    <span id="glossary-toggle-label">Hide glossary</span>
+  </button>
+</div>
+
+<main>
+
+  <!-- SINGLE -->
+  <section class="panel active" id="panel-single">
+    <div class="eyebrow">Single model</div>
+    <h1>One API key. 40+ models. No infrastructure.</h1>
+    <p class="sub">Pick any model from the catalog and send an OpenAI-compatible chat request to <code data-cfg="inferenceHost">—</code>. Server-measured latency and token counts returned inline.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Request</h3>
+        <label for="s-model">Model</label>
+        <select id="s-model"></select>
+        <div class="hint">Pulled live from <code>/v1/models</code>.</div>
+
+        <label for="s-prompt">Prompt</label>
+        <textarea id="s-prompt" placeholder="Ask anything…">Summarize the value proposition of serverless inference in 3 bullet points for a VP of Engineering.</textarea>
+        <div class="prompt-preset">
+          <button data-set="Summarize the value proposition of serverless inference in 3 bullet points for a VP of Engineering.">Sales pitch</button>
+          <button data-set="Write a Python function that parses an ISO 8601 date. Keep it to 10 lines.">Code task</button>
+          <button data-set="Classify this email as urgent, routine, or spam: 'Your account will be suspended unless you verify within 24 hours.'">Classify</button>
+          <button data-set="Explain RAG vs fine-tuning in two sentences.">Explain</button>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="s-max">Max tokens</label>
+            <input type="number" id="s-max" value="400" min="16" max="4096" />
+          </div>
+          <div>
+            <label for="s-temp">Temperature</label>
+            <input type="number" id="s-temp" value="0.7" step="0.1" min="0" max="2" />
+          </div>
+        </div>
+
+        <button class="primary" id="s-send">Send request</button>
+      </div>
+
+      <div class="card result" id="s-result">
+        <div class="meta" id="s-meta">
+          <div>Latency · <strong>—</strong></div>
+          <div>Tokens in · <strong>—</strong></div>
+          <div>Tokens out · <strong>—</strong></div>
+          <div>Model · <strong>—</strong></div>
+        </div>
+        <div class="content placeholder" id="s-body">Response will appear here.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPARE -->
+  <section class="panel" id="panel-compare">
+    <div class="eyebrow">Compare models</div>
+    <h1>Same prompt. Multiple models. Direct comparison.</h1>
+    <p class="sub">Fan the same request out to several models in parallel. Compare latency, token usage, and answer quality side-by-side — the setup for <em>why</em> routing matters.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Request</h3>
+        <label>Models (pick 2–6)</label>
+        <div class="models-picker" id="c-models"></div>
+
+        <label for="c-prompt">Prompt</label>
+        <textarea id="c-prompt" placeholder="Ask anything…">In one sentence, what is the capital of France?</textarea>
+        <div class="prompt-preset">
+          <button data-set="In one sentence, what is the capital of France?">Simple</button>
+          <button data-set="Summarize this email in one line: 'Hey team, quick reminder that the Q2 planning doc is due EOD Friday — please drop comments in the shared folder so we can consolidate before Monday.'">Summarize</button>
+          <button data-set="Classify the sentiment (positive/neutral/negative) of: 'The product works but the onboarding was painful.'">Classify</button>
+          <button data-set="Write a regex for a US phone number. Reply with just the regex.">Micro-task</button>
+          <button data-set="A farmer has 17 sheep and all but 9 run away. How many are left? Think step by step.">Reasoning</button>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="c-max">Max tokens</label>
+            <input type="number" id="c-max" value="500" min="16" max="4096" />
+          </div>
+          <div>
+            <label for="c-temp">Temperature</label>
+            <input type="number" id="c-temp" value="0.3" step="0.1" min="0" max="2" />
+          </div>
+        </div>
+
+        <button class="primary" id="c-send">Send to all</button>
+        <div class="hint">Fastest responder is highlighted in green.</div>
+      </div>
+
+      <div>
+        <div class="compare-grid" id="c-results">
+          <div class="compare-card"><div class="placeholder">Pick models and send a prompt to compare.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROUTER -->
+  <section class="panel" id="panel-router">
+    <div class="eyebrow">Task-aware routing</div>
+    <h1>One call. The router picks the model.</h1>
+    <p class="sub">Send a prompt to <code data-cfg="defaultRouter">—</code>. The router classifies the task — summarization, extraction, translation, classification, reasoning, code — and dispatches to the optimal model. No manual routing, no retry logic.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Request</h3>
+
+        <label for="r-router">Router</label>
+        <input type="text" id="r-router" placeholder="router:your-router" />
+        <div class="hint">Change this to test another router resource. Default uses the router shown in your console.</div>
+
+        <label>Try a task preset</label>
+        <div class="prompt-preset" id="r-presets"></div>
+
+        <label for="r-prompt">Prompt</label>
+        <textarea id="r-prompt" placeholder="Ask anything…">Summarize the following earnings update in 3 bullet points:
+
+"Acme Corp reported Q3 revenue of $2.1B, up 18% year-over-year, driven largely by enterprise software sales (+34%) and hardware (+6%). Operating margin expanded to 23%, from 19% last year. Free cash flow was $420M. The company raised full-year guidance by $150M at the midpoint, citing strong pipeline entering Q4 and tailwinds from AI-related demand. Leadership flagged ongoing supply constraints in networking gear as the main downside risk."</textarea>
+
+        <div class="row">
+          <div>
+            <label for="r-max">Max tokens</label>
+            <input type="number" id="r-max" value="500" min="16" max="4096" />
+          </div>
+          <div>
+            <label for="r-temp">Temperature</label>
+            <input type="number" id="r-temp" value="0.3" step="0.1" min="0" max="2" />
+          </div>
+        </div>
+
+        <button class="primary" id="r-send">Route &amp; send</button>
+        <div class="hint">Expected-model hint appears under the response so you can verify the routing decision live.</div>
+      </div>
+
+      <div>
+        <div class="card result" id="r-result">
+          <div class="routed-to" id="r-routed">
+            <span class="rt-label">Routed to</span>
+            <span class="rt-model mono" id="r-routed-model">—</span>
+            <span class="rt-expected" id="r-expected"></span>
+          </div>
+          <div class="meta" id="r-meta">
+            <div>Latency · <strong>—</strong></div>
+            <div>Tokens in · <strong>—</strong></div>
+            <div>Tokens out · <strong>—</strong></div>
+          </div>
+          <div class="content placeholder" id="r-body">Pick a task preset or write a prompt, then click Route &amp; send.</div>
+        </div>
+
+        <div class="router-history">
+          <div class="rh-title">Routing history</div>
+          <div id="r-history" class="rh-list"><div class="placeholder" style="font-size: 12px;">Each routing decision will show up here.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- IMAGE -->
+  <section class="panel" id="panel-image">
+    <div class="eyebrow">Image generation</div>
+    <h1>Same platform. Same key. Images too.</h1>
+    <p class="sub">Generate images through the same <code data-cfg="inferenceHost">—</code> endpoint at <code>/v1/images/generations</code>. Multimodal in one API, one bill — no separate vendor.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Request</h3>
+
+        <label for="i-model">Model</label>
+        <select id="i-model">
+          <option value="openai-gpt-image-1">openai-gpt-image-1</option>
+          <option value="openai-gpt-image-1.5">openai-gpt-image-1.5</option>
+          <option value="fal-ai/flux/schnell">fal-ai/flux/schnell</option>
+          <option value="fal-ai/fast-sdxl">fal-ai/fast-sdxl</option>
+        </select>
+        <div class="hint"><code>gpt-image</code> models ship enabled by default. <code>fal-ai/*</code> may need enablement on your account.</div>
+
+        <label for="i-prompt">Prompt</label>
+        <textarea id="i-prompt" placeholder="Describe the image…">A minimalist flat illustration of a small blue robot holding an umbrella in the rain, soft pastel sky, isometric perspective.</textarea>
+        <div class="prompt-preset">
+          <button data-set="A minimalist flat illustration of a small blue robot holding an umbrella in the rain, soft pastel sky, isometric perspective.">Illustration</button>
+          <button data-set="A clean product photo of a sleek wireless earbud case on a matte white surface, studio lighting, shallow depth of field, 4k.">Product shot</button>
+          <button data-set="A whimsical watercolor painting of a fox reading a book by a campfire at night, stars overhead.">Watercolor</button>
+          <button data-set="A cinematic photograph of a futuristic data center corridor lit by blue LED strips, wide angle, dramatic lighting.">Cinematic</button>
+          <button data-set="A simple geometric logo mark for a cloud inference company: a stylized wave rising out of a droplet, blue and white, vector style.">Logo</button>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="i-size">Size</label>
+            <select id="i-size">
+              <option value="1024x1024" selected>1024 × 1024 (square)</option>
+              <option value="1024x1536">1024 × 1536 (portrait)</option>
+              <option value="1536x1024">1536 × 1024 (landscape)</option>
+            </select>
+          </div>
+          <div>
+            <label for="i-n">Count</label>
+            <input type="number" id="i-n" value="1" min="1" max="4" />
+          </div>
+        </div>
+
+        <button class="primary" id="i-send">Generate image</button>
+        <div class="hint">Images can take 5–30 seconds depending on model and size.</div>
+      </div>
+
+      <div>
+        <div class="card result image-result" id="i-result">
+          <div class="meta" id="i-meta">
+            <div>Latency · <strong>—</strong></div>
+            <div>Model · <strong>—</strong></div>
+            <div>Size · <strong>—</strong></div>
+          </div>
+          <div class="image-output" id="i-body">
+            <div class="placeholder">Your generated image will appear here.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sb-header">
+    <span class="sb-title">Glossary</span>
+    <button class="sb-toggle" id="sb-toggle" title="Hide sidebar" aria-label="Hide sidebar">×</button>
+  </div>
+  <div class="sb-body">
+    <p class="sb-intro">Plain-language explanations for the terms you'll see on screen.</p>
+
+    <div class="sb-group-title">The big picture</div>
+
+    <dl class="sb-term">
+      <dt>Inference</dt>
+      <dd>When an AI model thinks and gives you an answer. Every prompt you send is one inference.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Serverless inference</dt>
+      <dd>You just use the AI. DigitalOcean handles the GPUs, scaling, and plumbing. You pay only for what you use.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Router <code>router:*</code></dt>
+      <dd>A smart switchboard. It reads your prompt, figures out the task, and sends it to the best model for the job.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Model</dt>
+      <dd>The actual AI brain (Claude, Llama, GPT, Gemma…). Some are big and smart, some are small and fast, some specialize in code or writing.</dd>
+    </dl>
+
+    <div class="sb-group-title">What you put in</div>
+
+    <dl class="sb-term">
+      <dt>Prompt</dt>
+      <dd>What you ask the AI — the text you type in the box.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Token</dt>
+      <dd>How AI counts text. Roughly <strong>¾ of a word</strong>. "Hello world" is about 2 tokens. You're charged per token.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Max tokens</dt>
+      <dd>A limit on how long the answer can be — like saying "keep it under 200 words." Protects you from runaway replies and surprise bills.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Temperature</dt>
+      <dd>How predictable or imaginative the answer is. <strong>Low (0 – 0.3)</strong> = serious and consistent — same answer every time. Good for classifying, extracting data, or anything factual. <strong>High (0.7 – 1)</strong> = playful and varied. Good for brainstorming, writing, or creative ideas.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Context window</dt>
+      <dd>How much the AI can read in one shot — its short-term memory for this request. Bigger window = can digest longer documents.</dd>
+    </dl>
+
+    <div class="sb-group-title">What you get back</div>
+
+    <dl class="sb-term">
+      <dt>Tokens in / out</dt>
+      <dd><strong>in</strong> = how much you asked. <strong>out</strong> = how much the AI wrote back. Both count toward your bill.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Latency</dt>
+      <dd>How long it takes to get the answer back. Small models are fast; big models on long prompts are slower.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Finish reason</dt>
+      <dd><strong>stop</strong> = the AI finished naturally. <strong>length</strong> = it ran out of room — bump up Max tokens if the answer got cut off.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Reasoning content</dt>
+      <dd>Some models show their work — like a student writing out steps before the final answer. If the answer is blank, we show this so you can see what the model was thinking.</dd>
+    </dl>
+
+    <div class="sb-group-title">Beyond text</div>
+
+    <dl class="sb-term">
+      <dt>Image generation</dt>
+      <dd>Same platform, same key — but the model draws instead of types. Response is a <code>b64_json</code> image you can show or save.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Multimodal</dt>
+      <dd>Text, images, embeddings, and audio all on one inference platform. One bill, one SDK, one account.</dd>
+    </dl>
+
+    <div class="sb-group-title">Under the hood</div>
+
+    <dl class="sb-term">
+      <dt>Chat completions</dt>
+      <dd>The standard API shape. If you've used OpenAI's API, DigitalOcean's <code>/v1/chat/completions</code> looks identical — same SDKs, no code rewrites.</dd>
+    </dl>
+    <dl class="sb-term">
+      <dt>Image generations</dt>
+      <dd>The image endpoint: <code>/v1/images/generations</code>. Same auth, same account — just a different URL for visuals.</dd>
+    </dl>
+  </div>
+</aside>
+
+
+<script>
+  // Curated fallback list used if /v1/models fails.
+  const FALLBACK_MODELS = [
+    'llama3.3-70b-instruct',
+    'openai-gpt-oss-120b',
+    'openai-gpt-oss-20b',
+    'anthropic-claude-haiku-4.5',
+    'anthropic-claude-4.6-sonnet',
+    'openai-gpt-5-nano',
+    'openai-gpt-5-mini',
+    'alibaba-qwen3-32b'
+  ];
+
+  const COMPARE_DEFAULTS = new Set([
+    'anthropic-claude-haiku-4.5',
+    'openai-gpt-oss-20b',
+    'llama3.3-70b-instruct'
+  ]);
+
+  // Tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+    });
+  });
+
+  // Prompt presets
+  document.querySelectorAll('.prompt-preset button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const panel = e.target.closest('.panel');
+      const ta = panel.querySelector('textarea');
+      ta.value = e.target.dataset.set;
+    });
+  });
+
+  // Load models
+  async function loadModels() {
+    let ids = FALLBACK_MODELS;
+    try {
+      const r = await fetch('/api/models');
+      const j = await r.json();
+      if (j?.data?.length) {
+        ids = j.data.map(m => m.id).filter(Boolean).sort();
+      }
+    } catch (e) { /* fallback */ }
+
+    const sSelect = document.getElementById('s-model');
+    sSelect.innerHTML = ids.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join('');
+    const preferred = ['anthropic-claude-haiku-4.5', 'llama3.3-70b-instruct', ids[0]].find(x => ids.includes(x));
+    if (preferred) sSelect.value = preferred;
+
+    const cPicker = document.getElementById('c-models');
+    cPicker.innerHTML = ids.map(id => {
+      const checked = COMPARE_DEFAULTS.has(id) ? 'checked' : '';
+      return `<label><input type="checkbox" value="${escapeHtml(id)}" ${checked}/> ${escapeHtml(id)}</label>`;
+    }).join('');
+  }
+
+  // Single send
+  document.getElementById('s-send').addEventListener('click', async () => {
+    const btn = document.getElementById('s-send');
+    const body = document.getElementById('s-body');
+    const meta = document.getElementById('s-meta');
+    const card = document.getElementById('s-result');
+    card.classList.remove('error');
+    btn.disabled = true; btn.innerHTML = 'Sending<span class="loading"></span>';
+    body.classList.remove('placeholder');
+    body.textContent = '';
+    try {
+      const payload = {
+        model: document.getElementById('s-model').value,
+        messages: [{ role: 'user', content: document.getElementById('s-prompt').value }],
+        max_completion_tokens: Number(document.getElementById('s-max').value) || 400,
+        temperature: Number(document.getElementById('s-temp').value)
+      };
+      const t0 = performance.now();
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await r.json();
+      const clientMs = Math.round(performance.now() - t0);
+
+      if (!r.ok || data.error) {
+        card.classList.add('error');
+        body.textContent = JSON.stringify(data, null, 2);
+        meta.innerHTML = `<div>Status · <strong>${Number(r.status)}</strong></div><div>Latency · <strong>${Number(clientMs)} ms</strong></div>`;
+        return;
+      }
+      const msg = data.choices?.[0]?.message || {};
+      const finish = data.choices?.[0]?.finish_reason;
+      let content = msg.content;
+      if (!content && msg.reasoning_content) {
+        content = `[reasoning only · finish_reason=${finish}]\n\n${msg.reasoning_content}`;
+      }
+      if (!content) content = '(no content)';
+      const u = data.usage || {};
+      meta.innerHTML = `
+        <div>Latency · <strong>${Number(data.latency_ms ?? clientMs)} ms</strong></div>
+        <div>Tokens in · <strong>${u.prompt_tokens != null ? Number(u.prompt_tokens) : '—'}</strong></div>
+        <div>Tokens out · <strong>${u.completion_tokens != null ? Number(u.completion_tokens) : '—'}</strong></div>
+        <div>Model · <strong>${escapeHtml(data.model ?? payload.model)}</strong></div>
+      `;
+      body.textContent = content;
+    } catch (e) {
+      card.classList.add('error');
+      body.textContent = String(e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send request';
+    }
+  });
+
+  // Compare send
+  document.getElementById('c-send').addEventListener('click', async () => {
+    const btn = document.getElementById('c-send');
+    const grid = document.getElementById('c-results');
+    const picked = [...document.querySelectorAll('#c-models input:checked')].map(x => x.value);
+    if (picked.length < 2) {
+      grid.innerHTML = `<div class="compare-card error"><div class="body">Pick at least 2 models.</div></div>`;
+      return;
+    }
+    btn.disabled = true; btn.innerHTML = 'Routing<span class="loading"></span>';
+    grid.innerHTML = picked.map(m => `
+      <div class="compare-card" data-model="${escapeHtml(m)}">
+        <div class="model-name">${escapeHtml(m)}</div>
+        <div class="stats"><div>waiting…<span class="loading"></span></div></div>
+        <div class="body placeholder">—</div>
+      </div>
+    `).join('');
+    try {
+      const payload = {
+        models: picked,
+        messages: [{ role: 'user', content: document.getElementById('c-prompt').value }],
+        max_completion_tokens: Number(document.getElementById('c-max').value) || 300,
+        temperature: Number(document.getElementById('c-temp').value)
+      };
+      const r = await fetch('/api/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const { results = [] } = await r.json();
+
+      // Find fastest successful
+      const ok = results.filter(x => x.status === 200 && x.data?.choices);
+      let fastest = null;
+      if (ok.length) fastest = ok.reduce((a, b) => (a.latency_ms < b.latency_ms ? a : b)).model;
+
+      grid.innerHTML = results.map(res => {
+        const isErr = !(res.status === 200 && res.data?.choices);
+        let content;
+        if (isErr) {
+          content = res.error || JSON.stringify(res.data, null, 2);
+        } else {
+          const m = res.data.choices[0].message || {};
+          const finish = res.data.choices[0].finish_reason;
+          content = m.content;
+          if (!content && m.reasoning_content) {
+            content = `[reasoning only · finish_reason=${finish}]\n\n${m.reasoning_content}`;
+          }
+          if (!content) content = '(no content)';
+        }
+        const u = res.data?.usage || {};
+        const latClass = res.model === fastest ? 'lat' : '';
+        return `
+          <div class="compare-card ${isErr ? 'error' : ''} ${res.model === fastest ? 'winner' : ''}" data-model="${escapeHtml(res.model)}">
+            <div class="model-name">${escapeHtml(res.model)}</div>
+            <div class="stats">
+              <div>latency · <strong class="${latClass}">${Number(res.latency_ms)} ms</strong></div>
+              <div>in · <strong>${u.prompt_tokens != null ? Number(u.prompt_tokens) : '—'}</strong></div>
+              <div>out · <strong>${u.completion_tokens != null ? Number(u.completion_tokens) : '—'}</strong></div>
+              ${isErr ? `<div>status · <strong>${Number(res.status)}</strong></div>` : ''}
+            </div>
+            <div class="body">${escapeHtml(content)}</div>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      grid.innerHTML = `<div class="compare-card error"><div class="body">${escapeHtml(String(e))}</div></div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send to all';
+    }
+  });
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  // -------- Router tab --------
+
+  // Presets are ordered to walk a sales demo from simple → advanced.
+  // Each `expected` is the task class the router should recognize (from the Router inventory).
+  const ROUTER_PRESETS = [
+    {
+      label: 'Summarize',
+      expected: 'summarization',
+      prompt:
+`Summarize the following earnings update in 3 bullet points:
+
+"Acme Corp reported Q3 revenue of $2.1B, up 18% year-over-year, driven largely by enterprise software sales (+34%) and hardware (+6%). Operating margin expanded to 23%, from 19% last year. Free cash flow was $420M. The company raised full-year guidance by $150M at the midpoint, citing strong pipeline entering Q4 and tailwinds from AI-related demand. Leadership flagged ongoing supply constraints in networking gear as the main downside risk."`
+    },
+    {
+      label: 'Translate',
+      expected: 'translation',
+      prompt:
+`Translate the following passage from English to French. Preserve tone and any technical terms.
+
+"The quarterly review highlighted three priorities: customer retention, margin expansion, and a disciplined hiring plan for the remainder of the fiscal year."`
+    },
+    {
+      label: 'Classify',
+      expected: 'classification-labeling',
+      prompt:
+`Classify the sentiment of the following customer review as positive, neutral, or negative. Reply with one word only.
+
+Review: "Setup took forever and the documentation is confusing, but once it was working the product was fine I guess."`
+    },
+    {
+      label: 'Extract JSON',
+      expected: 'text-extraction-structured-output',
+      prompt:
+`Extract all people, companies, dollar amounts, and dates from the following paragraph. Return JSON with keys: people, companies, amounts, dates.
+
+"On March 4 2024, Jane Doe (CEO of Northstar Labs) announced a $45M Series B led by Union Ventures, with participation from Benchmark and Sarah Park's firm Arcadia Capital."`
+    },
+    {
+      label: 'Brainstorm',
+      expected: 'brainstorming-ideation',
+      prompt:
+`Give me 8 distinct product name ideas for a new AI-powered meeting-notes assistant aimed at sales teams. Mix playful and serious names.`
+    },
+    {
+      label: 'Advice',
+      expected: 'opinion-advice-recommendation',
+      prompt:
+`I'm a small SaaS founder with 3 engineers. Should I self-host Postgres or use DigitalOcean Managed Databases? Give me a clear recommendation with the top 2 reasons.`
+    },
+    {
+      label: 'Code',
+      expected: 'code / reasoning',
+      prompt:
+`Are there any syntax issues here?
+
+Python
+prices_usd = {'laptop': 1200, 'mouse': 25, 'monitor': 300, 'cable': 12}
+exchange_rate = 0.92
+expensive_items_eur = {k: v * exchange_rate for k, v in prices_usd.items() if v > 50}
+print(expensive_items_eur)`
+    },
+    {
+      label: 'Reasoning',
+      expected: 'reasoning / planning',
+      prompt:
+`A farmer has 17 sheep and all but 9 run away. How many are left? Think step by step before answering.`
+    }
+  ];
+
+  let currentExpected = ROUTER_PRESETS[0].expected;
+
+  function renderRouterPresets() {
+    const host = document.getElementById('r-presets');
+    host.innerHTML = ROUTER_PRESETS.map((p, i) =>
+      `<button data-i="${i}" class="${i === 0 ? 'active' : ''}">${p.label}</button>`
+    ).join('');
+    host.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = ROUTER_PRESETS[Number(btn.dataset.i)];
+        document.getElementById('r-prompt').value = p.prompt;
+        currentExpected = p.expected;
+        host.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
+  renderRouterPresets();
+
+  document.getElementById('r-send').addEventListener('click', async () => {
+    const btn = document.getElementById('r-send');
+    const body = document.getElementById('r-body');
+    const meta = document.getElementById('r-meta');
+    const routedModel = document.getElementById('r-routed-model');
+    const expected = document.getElementById('r-expected');
+    const card = document.getElementById('r-result');
+
+    card.classList.remove('error');
+    btn.disabled = true; btn.innerHTML = 'Routing<span class="loading"></span>';
+    body.classList.remove('placeholder');
+    body.textContent = '';
+    routedModel.textContent = '…';
+    expected.innerHTML = `expected task · <strong>${escapeHtml(currentExpected)}</strong>`;
+
+    const routerName = document.getElementById('r-router').value.trim();
+    try {
+      const payload = {
+        model: routerName,
+        messages: [{ role: 'user', content: document.getElementById('r-prompt').value }],
+        max_tokens: Number(document.getElementById('r-max').value) || 500,
+        temperature: Number(document.getElementById('r-temp').value)
+      };
+      const t0 = performance.now();
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await r.json();
+      const clientMs = Math.round(performance.now() - t0);
+
+      if (!r.ok || data.error) {
+        card.classList.add('error');
+        routedModel.textContent = '—';
+        body.textContent = JSON.stringify(data, null, 2);
+        meta.innerHTML = `<div>Status · <strong>${Number(r.status)}</strong></div><div>Latency · <strong>${Number(clientMs)} ms</strong></div>`;
+        return;
+      }
+
+      // Figure out the downstream model the router picked.
+      // Prefer explicit routing metadata if present, else the top-level `model`
+      // field; fall back to the router name so the UI never goes blank.
+      const downstream =
+        data.router?.model ||
+        data.routing?.model ||
+        data.metadata?.model ||
+        (data.model && data.model !== routerName ? data.model : null) ||
+        data.model ||
+        routerName;
+
+      const msg = data.choices?.[0]?.message || {};
+      const finish = data.choices?.[0]?.finish_reason;
+      let content = msg.content;
+      if (!content && msg.reasoning_content) {
+        content = `[reasoning only · finish_reason=${finish}]\n\n${msg.reasoning_content}`;
+      }
+      if (!content) content = '(no content)';
+
+      const u = data.usage || {};
+      routedModel.textContent = downstream;
+      meta.innerHTML = `
+        <div>Latency · <strong>${Number(data.latency_ms ?? clientMs)} ms</strong></div>
+        <div>Tokens in · <strong>${u.prompt_tokens != null ? Number(u.prompt_tokens) : '—'}</strong></div>
+        <div>Tokens out · <strong>${u.completion_tokens != null ? Number(u.completion_tokens) : '—'}</strong></div>
+      `;
+      body.textContent = content;
+
+      pushHistory({
+        task: currentExpected,
+        model: downstream,
+        latency: data.latency_ms ?? clientMs,
+        tokensIn: u.prompt_tokens,
+        tokensOut: u.completion_tokens
+      });
+    } catch (e) {
+      card.classList.add('error');
+      routedModel.textContent = '—';
+      body.textContent = String(e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Route & send';
+    }
+  });
+
+  const history = [];
+  function pushHistory(entry) {
+    history.unshift(entry);
+    if (history.length > 8) history.pop();
+    const host = document.getElementById('r-history');
+    host.innerHTML = history.map(h => `
+      <div class="rh-item">
+        <span class="rh-task">${escapeHtml(h.task)}</span>
+        <span class="rh-model">${escapeHtml(h.model)}</span>
+        <span class="rh-stats">${Number(h.latency)} ms · ${h.tokensIn != null ? Number(h.tokensIn) : '—'}/${h.tokensOut != null ? Number(h.tokensOut) : '—'} tok</span>
+      </div>
+    `).join('');
+  }
+
+  loadModels();
+
+  // Load server config (env-backed) and populate any [data-cfg] element + the router input.
+  (async () => {
+    try {
+      const r = await fetch('/api/config');
+      const cfg = await r.json();
+      document.querySelectorAll('[data-cfg]').forEach(el => {
+        const key = el.dataset.cfg;
+        if (cfg && cfg[key]) el.textContent = cfg[key];
+      });
+      if (cfg?.defaultRouter) {
+        document.getElementById('r-router').value = cfg.defaultRouter;
+      }
+    } catch { /* leave placeholders */ }
+  })();
+
+  // -------- Image tab --------
+  document.getElementById('i-send').addEventListener('click', async () => {
+    const btn = document.getElementById('i-send');
+    const meta = document.getElementById('i-meta');
+    const body = document.getElementById('i-body');
+    const card = document.getElementById('i-result');
+    const model = document.getElementById('i-model').value;
+    const size = document.getElementById('i-size').value;
+    const n = Number(document.getElementById('i-n').value) || 1;
+    const prompt = document.getElementById('i-prompt').value;
+
+    card.classList.remove('error');
+    btn.disabled = true; btn.innerHTML = 'Generating<span class="loading"></span>';
+    body.innerHTML = `<div class="placeholder">Generating… can take 5–30s.<span class="loading"></span></div>`;
+
+    const t0 = performance.now();
+    try {
+      const r = await fetch('/api/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt, n, size })
+      });
+      const data = await r.json();
+      const clientMs = Math.round(performance.now() - t0);
+
+      if (!r.ok || data.error) {
+        card.classList.add('error');
+        meta.innerHTML = `<div>Status · <strong>${Number(r.status)}</strong></div><div>Latency · <strong>${Number(clientMs)} ms</strong></div>`;
+        body.innerHTML = `<div class="placeholder" style="color: var(--err)">${escapeHtml(JSON.stringify(data.error || data, null, 2))}</div>`;
+        return;
+      }
+
+      meta.innerHTML = `
+        <div>Latency · <strong>${Number(data.latency_ms ?? clientMs)} ms</strong></div>
+        <div>Model · <strong>${escapeHtml(model)}</strong></div>
+        <div>Size · <strong>${escapeHtml(size)}</strong></div>
+        <div>Count · <strong>${Number((data.data || []).length)}</strong></div>
+      `;
+      const items = data.data || [];
+      if (!items.length) {
+        body.innerHTML = `<div class="placeholder">No images returned.</div>`;
+        return;
+      }
+      body.innerHTML = items.map((item, idx) => {
+        const src = item.b64_json ? `data:image/png;base64,${item.b64_json}` : item.url;
+        const safeSrc = escapeHtml(src);
+        return `
+          <div class="img-card">
+            <img src="${safeSrc}" alt="generated image ${idx + 1}" />
+            <div class="img-actions">
+              <span>#${idx + 1}</span>
+              <a href="${safeSrc}" download="do-image-${Date.now()}-${idx + 1}.png">download</a>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      card.classList.add('error');
+      body.innerHTML = `<div class="placeholder" style="color: var(--err)">${escapeHtml(String(e))}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Generate image';
+    }
+  });
+
+  // Sidebar toggle (single state, two controls: tabs-bar button + sidebar ✕)
+  function setSidebarOpen(open) {
+    document.body.classList.toggle('sidebar-closed', !open);
+    const label = document.getElementById('glossary-toggle-label');
+    if (label) label.textContent = open ? 'Hide glossary' : 'Show glossary';
+    const btn = document.getElementById('glossary-toggle');
+    if (btn) btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  }
+  document.getElementById('glossary-toggle').addEventListener('click', () => {
+    setSidebarOpen(document.body.classList.contains('sidebar-closed'));
+  });
+  document.getElementById('sb-toggle').addEventListener('click', () => setSidebarOpen(false));
+</script>
+
+</body>
+</html>

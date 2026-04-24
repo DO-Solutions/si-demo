@@ -1,0 +1,10 @@
+{
+  "name": "do-inference-demo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node --env-file=.env server.js"
+  }
+}
