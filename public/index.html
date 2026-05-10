@@ -11,13 +11,29 @@
 </head>
 <body>
 
+<div id="access-gate" class="access-gate" hidden>
+  <div class="access-gate-card">
+    <h2 class="access-gate-title">Enter access password</h2>
+    <p class="access-gate-sub">This demo requires a password for this browser tab.</p>
+    <form id="access-gate-form">
+      <label for="access-password">Password</label>
+      <input type="password" id="access-password" name="password" autocomplete="current-password" required />
+      <p id="access-gate-error" class="access-gate-error" role="alert"></p>
+      <button type="submit" class="primary">Unlock</button>
+    </form>
+  </div>
+</div>
+
 <header>
   <div class="brand">
     <img class="do-logo" src="/assets/digitalocean-logo.svg" alt="DigitalOcean" onerror="this.onerror=null;this.src='/assets/digitalocean-logo.png';" />
     <span class="brand-sep">·</span>
     <span class="brand-demo">Inference Demo</span>
   </div>
-  <div class="tag" data-cfg="inferenceHost">—</div>
+  <div class="header-actions">
+    <button type="button" class="sign-out-btn" id="sign-out" hidden>Sign out</button>
+    <div class="tag" data-cfg="inferenceHost">—</div>
+  </div>
 </header>
 
 <div class="tabs">
@@ -347,6 +363,31 @@
 
 
 <script>
+  const SESSION_STORAGE_KEY = 'si_demo_session_token';
+  let appCfg = {};
+
+  async function apiFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    const token = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const r = await fetch(url, { ...options, headers });
+    if (
+      r.status === 401 &&
+      url.startsWith('/api/') &&
+      url !== '/api/config' &&
+      url !== '/api/session'
+    ) {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      if (appCfg.accessRequired) {
+        const gate = document.getElementById('access-gate');
+        const so = document.getElementById('sign-out');
+        if (gate) gate.hidden = false;
+        if (so) so.hidden = true;
+      }
+    }
+    return r;
+  }
+
   // Curated fallback list used if /v1/models fails.
   const FALLBACK_MODELS = [
     'llama3.3-70b-instruct',
@@ -388,7 +429,7 @@
   async function loadModels() {
     let ids = FALLBACK_MODELS;
     try {
-      const r = await fetch('/api/models');
+      const r = await apiFetch('/api/models');
       const j = await r.json();
       if (j?.data?.length) {
         ids = j.data.map(m => m.id).filter(Boolean).sort();
@@ -425,7 +466,7 @@
         temperature: Number(document.getElementById('s-temp').value)
       };
       const t0 = performance.now();
-      const r = await fetch('/api/chat', {
+      const r = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -486,7 +527,7 @@
         max_completion_tokens: Number(document.getElementById('c-max').value) || 300,
         temperature: Number(document.getElementById('c-temp').value)
       };
-      const r = await fetch('/api/compare', {
+      const r = await apiFetch('/api/compare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -650,7 +691,7 @@ print(expensive_items_eur)`
         temperature: Number(document.getElementById('r-temp').value)
       };
       const t0 = performance.now();
-      const r = await fetch('/api/chat', {
+      const r = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -724,23 +765,6 @@ print(expensive_items_eur)`
     `).join('');
   }
 
-  loadModels();
-
-  // Load server config (env-backed) and populate any [data-cfg] element + the router input.
-  (async () => {
-    try {
-      const r = await fetch('/api/config');
-      const cfg = await r.json();
-      document.querySelectorAll('[data-cfg]').forEach(el => {
-        const key = el.dataset.cfg;
-        if (cfg && cfg[key]) el.textContent = cfg[key];
-      });
-      if (cfg?.defaultRouter) {
-        document.getElementById('r-router').value = cfg.defaultRouter;
-      }
-    } catch { /* leave placeholders */ }
-  })();
-
   // -------- Image tab --------
   document.getElementById('i-send').addEventListener('click', async () => {
     const btn = document.getElementById('i-send');
@@ -758,7 +782,7 @@ print(expensive_items_eur)`
 
     const t0 = performance.now();
     try {
-      const r = await fetch('/api/image', {
+      const r = await apiFetch('/api/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, prompt, n, size })
@@ -817,6 +841,83 @@ print(expensive_items_eur)`
     setSidebarOpen(document.body.classList.contains('sidebar-closed'));
   });
   document.getElementById('sb-toggle').addEventListener('click', () => setSidebarOpen(false));
+
+  (async function bootstrap() {
+    const gateEl = document.getElementById('access-gate');
+    const signOutBtn = document.getElementById('sign-out');
+    const errEl = document.getElementById('access-gate-error');
+
+    function applyServerCfg(cfg) {
+      document.querySelectorAll('[data-cfg]').forEach(el => {
+        const key = el.dataset.cfg;
+        if (cfg && cfg[key]) el.textContent = cfg[key];
+      });
+      if (cfg?.defaultRouter) {
+        document.getElementById('r-router').value = cfg.defaultRouter;
+      }
+    }
+
+    function showGate() {
+      gateEl.hidden = false;
+      signOutBtn.hidden = true;
+    }
+
+    function hideGate() {
+      gateEl.hidden = true;
+      if (appCfg.accessRequired) signOutBtn.hidden = false;
+    }
+
+    try {
+      const r = await fetch('/api/config');
+      appCfg = await r.json();
+    } catch {
+      appCfg = {};
+    }
+
+    applyServerCfg(appCfg);
+
+    if (!appCfg.accessRequired) {
+      await loadModels();
+      return;
+    }
+
+    signOutBtn.hidden = true;
+
+    if (sessionStorage.getItem(SESSION_STORAGE_KEY)) {
+      hideGate();
+      await loadModels();
+    } else {
+      showGate();
+    }
+
+    document.getElementById('access-gate-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.textContent = '';
+      const pw = document.getElementById('access-password').value;
+      const r = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      });
+      let data = {};
+      try {
+        data = await r.json();
+      } catch { /* ignore */ }
+      if (!r.ok || !data.token) {
+        errEl.textContent = 'Invalid password.';
+        return;
+      }
+      sessionStorage.setItem(SESSION_STORAGE_KEY, data.token);
+      hideGate();
+      await loadModels();
+    });
+
+    signOutBtn.addEventListener('click', () => {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      document.getElementById('access-password').value = '';
+      showGate();
+    });
+  })();
 </script>
 
 </body>

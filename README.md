@@ -20,7 +20,8 @@ A simple browser demo of the DigitalOcean Inference API. Single Node.js server (
 
 ```sh
 cp .env.example .env
-# edit .env and fill in DO_INFERENCE_KEY and DEFAULT_ROUTER
+# edit .env: DO_INFERENCE_KEY and DEFAULT_ROUTER (required for Inference)
+# optional: set PAGE_ACCESS_PASSWORD to require an unlock password for this deployment
 npm start
 ```
 
@@ -36,12 +37,14 @@ When both are set, real environment variables take precedence over values in `.e
 
 ## Configuration
 
-Only two values are externalized — everything else (base URL, paths, model lists, UI defaults, branding) lives as inline constants in `server.js` so the demo runs with minimal env setup.
+Inference credentials and a few runtime options are read from the environment (or `.env`). Everything else (base URL, paths, model lists, UI defaults, branding) lives as inline constants in `server.js` so the demo runs with minimal setup.
 
 | Variable | Required | Description |
 |---|---|---|
 | `DO_INFERENCE_KEY` | yes | Your DigitalOcean Inference API key. |
 | `DEFAULT_ROUTER` | recommended | Router model identifier shown in the Router tab (e.g. `router:your-router-name`). |
+| `PAGE_ACCESS_PASSWORD` | no | If **non-empty** (after trimming), enables a **page gate**: the UI shows a password screen on cold load, and proxied routes (`/api/models`, `/api/chat`, `/api/compare`, `/api/image`) require `Authorization: Bearer <token>` from `POST /api/session`. The browser stores the token in **`sessionStorage`** (cleared when the tab closes). Leave unset or empty for an open demo with no password. |
+| `PAGE_SESSION_SECRET` | no | Advanced: if set in the environment, used to **sign** session tokens so they stay valid across **server restarts**. If unset while the gate is on, the server generates a **random signing key at startup** — tokens stop working after each restart until the user signs in again. |
 | `PORT` | no | Override the listen port. Defaults to `3000`. |
 
 If you need to point at a different base URL, change endpoint paths, swap the model lists, or tweak the UI defaults, edit the constants near the top of `server.js`.
@@ -98,6 +101,8 @@ For `/api/chat` and `/api/image`, the server parses Inference JSON when possible
 
 **`DO_INFERENCE_KEY` never reaches the browser**, but anyone who can reach the demo server can trigger Inference calls through it—treat that server as the trust boundary (local demos or deployments you lock down with network policy or auth in front of the app).
 
+With **`PAGE_ACCESS_PASSWORD`** set, casual access to the proxy APIs is blocked until a client obtains a session token (shared demo password, not user accounts). That is **not** a substitute for full authentication or network isolation; anyone who knows the password can call the APIs.
+
 ## Endpoints
 
 The frontend talks to the local server, which proxies through to Inference using the API key (the key never reaches the browser).
@@ -108,7 +113,10 @@ The frontend talks to the local server, which proxies through to Inference using
 | `/api/compare` | POST | `/v1/chat/completions` (fan-out across N models) |
 | `/api/image` | POST | `/v1/images/generations` |
 | `/api/models` | GET | `/v1/models` |
-| `/api/config` | GET | Returns the public config consumed by the frontend |
+| `/api/config` | GET | Returns the public config consumed by the frontend (`accessRequired` reflects whether `PAGE_ACCESS_PASSWORD` is set) |
+| `/api/session` | POST | Body `{ "password": "..." }` — if the gate is enabled, returns `{ "token": "..." }` on success; always reachable without a prior token so the UI can unlock |
+
+When **`PAGE_ACCESS_PASSWORD`** is set, the browser must send **`Authorization: Bearer <token>`** on `/api/models`, `/api/chat`, `/api/compare`, and `/api/image`. `/api/config` and `/api/session` stay unauthenticated.
 
 ## Notes
 

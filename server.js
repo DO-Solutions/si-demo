@@ -1,9 +1,86 @@
 import { createServer } from 'node:http';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const PAGE_ACCESS_PASSWORD = (process.env.PAGE_ACCESS_PASSWORD ?? '').trim();
+const ACCESS_REQUIRED = PAGE_ACCESS_PASSWORD.length > 0;
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function resolveSessionSigningKey() {
+  const explicit = (process.env.PAGE_SESSION_SECRET ?? '').trim();
+  if (explicit) return { key: Buffer.from(explicit, 'utf8'), ephemeral: false };
+  if (!ACCESS_REQUIRED) return { key: null, ephemeral: false };
+  return { key: randomBytes(32), ephemeral: true };
+}
+
+const { key: SESSION_SIGNING_KEY, ephemeral: SESSION_KEY_EPHEMERAL } = resolveSessionSigningKey();
+
+if ((process.env.PAGE_SESSION_SECRET ?? '').trim() && !ACCESS_REQUIRED) {
+  console.warn(
+    '[si-demo] PAGE_SESSION_SECRET is set but PAGE_ACCESS_PASSWORD is empty — the page gate stays off. Set a non-empty PAGE_ACCESS_PASSWORD to require unlock.'
+  );
+}
+
+function timingSafePasswordEqual(provided, expected) {
+  const a = createHash('sha256').update(String(provided ?? ''), 'utf8').digest();
+  const b = createHash('sha256').update(String(expected ?? ''), 'utf8').digest();
+  return timingSafeEqual(a, b);
+}
+
+function issueSessionToken() {
+  const exp = Date.now() + SESSION_TTL_MS;
+  const payload = Buffer.from(JSON.stringify({ exp }), 'utf8').toString('base64url');
+  const sig = createHmac('sha256', SESSION_SIGNING_KEY).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifySessionToken(token) {
+  if (!token || !SESSION_SIGNING_KEY) return false;
+  const dot = token.lastIndexOf('.');
+  if (dot <= 0) return false;
+  const payloadPart = token.slice(0, dot);
+  const sigPart = token.slice(dot + 1);
+  const expectedSig = createHmac('sha256', SESSION_SIGNING_KEY).update(payloadPart).digest('base64url');
+  const sb = Buffer.from(sigPart, 'utf8');
+  const eb = Buffer.from(expectedSig, 'utf8');
+  if (sb.length !== eb.length) return false;
+  if (!timingSafeEqual(sb, eb)) return false;
+  try {
+    const { exp } = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8'));
+    return typeof exp === 'number' && Date.now() < exp;
+  } catch {
+    return false;
+  }
+}
+
+function bearerToken(req) {
+  const h = req.headers.authorization;
+  if (!h || typeof h !== 'string' || !h.startsWith('Bearer ')) return null;
+  return h.slice(7).trim() || null;
+}
+
+function sendUnauthorized(res) {
+  res.writeHead(401, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'unauthorized' }));
+}
+
+function requireSession(req, res) {
+  if (!ACCESS_REQUIRED) return true;
+  const token = bearerToken(req);
+  if (!token || !verifySessionToken(token)) {
+    sendUnauthorized(res);
+    return false;
+  }
+  return true;
+}
+
+function pathname(req) {
+  return req.url.split('?')[0];
+}
 
 const API_KEY = process.env.DO_INFERENCE_KEY;
 if (!API_KEY) {
@@ -108,7 +185,31 @@ async function handleModels(req, res) {
 
 function handleConfig(req, res) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(PUBLIC_CONFIG));
+  res.end(JSON.stringify({ ...PUBLIC_CONFIG, accessRequired: ACCESS_REQUIRED }));
+}
+
+async function handleSession(req, res) {
+  if (!ACCESS_REQUIRED) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ token: null }));
+    return;
+  }
+  let body;
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'invalid_json' }));
+    return;
+  }
+  const password = body?.password;
+  if (!timingSafePasswordEqual(password, PAGE_ACCESS_PASSWORD)) {
+    sendUnauthorized(res);
+    return;
+  }
+  const token = issueSessionToken();
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ token }));
 }
 
 async function handleChat(req, res) {
@@ -185,11 +286,25 @@ async function serveStatic(req, res) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.url === '/api/chat' && req.method === 'POST') return handleChat(req, res);
-    if (req.url === '/api/compare' && req.method === 'POST') return handleCompare(req, res);
-    if (req.url === '/api/image' && req.method === 'POST') return handleImage(req, res);
-    if (req.url === '/api/models' && req.method === 'GET') return handleModels(req, res);
-    if (req.url === '/api/config' && req.method === 'GET') return handleConfig(req, res);
+    const path = pathname(req);
+    if (path === '/api/chat' && req.method === 'POST') {
+      if (!requireSession(req, res)) return;
+      return handleChat(req, res);
+    }
+    if (path === '/api/compare' && req.method === 'POST') {
+      if (!requireSession(req, res)) return;
+      return handleCompare(req, res);
+    }
+    if (path === '/api/image' && req.method === 'POST') {
+      if (!requireSession(req, res)) return;
+      return handleImage(req, res);
+    }
+    if (path === '/api/models' && req.method === 'GET') {
+      if (!requireSession(req, res)) return;
+      return handleModels(req, res);
+    }
+    if (path === '/api/config' && req.method === 'GET') return handleConfig(req, res);
+    if (path === '/api/session' && req.method === 'POST') return handleSession(req, res);
     return serveStatic(req, res);
   } catch (e) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -199,4 +314,13 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`\n${PUBLIC_CONFIG.brandTitle} → http://localhost:${PORT}\n`);
+  if (ACCESS_REQUIRED) {
+    console.log('[si-demo] Page access gate on — unlock with PAGE_ACCESS_PASSWORD.');
+    if (SESSION_KEY_EPHEMERAL) {
+      console.log(
+        '[si-demo] Session signing key is ephemeral (random at startup) — tokens do not survive server restart. Set PAGE_SESSION_SECRET for a stable key.'
+      );
+    }
+    console.log('');
+  }
 });
