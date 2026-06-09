@@ -843,7 +843,7 @@ print(expensive_items_eur)`
       const payload = {
         model: routerName,
         messages: [{ role: 'user', content: document.getElementById('r-prompt').value }],
-        max_tokens: Number(document.getElementById('r-max').value) || 500,
+        max_completion_tokens: Number(document.getElementById('r-max').value) || 500,
         temperature: Number(document.getElementById('r-temp').value)
       };
       const t0 = performance.now();
@@ -863,16 +863,12 @@ print(expensive_items_eur)`
         return;
       }
 
-      // Figure out the downstream model the router picked.
-      // Prefer explicit routing metadata if present, else the top-level `model`
-      // field; fall back to the router name so the UI never goes blank.
-      const downstream =
-        data.router?.model ||
-        data.routing?.model ||
-        data.metadata?.model ||
-        (data.model && data.model !== routerName ? data.model : null) ||
-        data.model ||
-        routerName;
+      // The router reports the downstream model it picked in the response `model`
+      // field (e.g. "openai-gpt-oss-120b"). Fall back to the router name only so
+      // the UI never goes blank. `router_selected_route` is the routing status the
+      // proxy forwards from the x-model-router-selected-route header ("fallback", etc.).
+      const downstream = data.model || routerName;
+      const route = data.router_selected_route;
 
       const msg = data.choices?.[0]?.message || {};
       const finish = data.choices?.[0]?.finish_reason;
@@ -884,10 +880,14 @@ print(expensive_items_eur)`
 
       const u = data.usage || {};
       routedModel.textContent = downstream;
+      const routeHtml = route
+        ? `<div>Route · <strong${route === 'fallback' ? ' style="color:var(--warn)"' : ''}>${escapeHtml(route)}</strong></div>`
+        : '';
       meta.innerHTML = `
         <div>Latency · <strong>${Number(data.latency_ms ?? clientMs)} ms</strong></div>
         <div>Tokens in · <strong>${u.prompt_tokens != null ? Number(u.prompt_tokens) : '—'}</strong></div>
         <div>Tokens out · <strong>${u.completion_tokens != null ? Number(u.completion_tokens) : '—'}</strong></div>
+        ${routeHtml}
       `;
       body.textContent = content;
 
