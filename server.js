@@ -161,7 +161,7 @@ const PUBLIC_CONFIG = {
   defaultTemperatureSingle: 0.7,
   defaultMaxTokensCompare: 500,
   defaultTemperatureCompare: 0.3,
-  defaultMaxTokensRouter: 500,
+  defaultMaxTokensRouter: 2048,
   defaultTemperatureRouter: 0.3
 };
 
