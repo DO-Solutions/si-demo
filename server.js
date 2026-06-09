@@ -123,6 +123,8 @@ const PATH_MODELS = '/v1/models';
 const PATH_CHAT = '/v1/chat/completions';
 const PATH_IMAGES = '/v1/images/generations';
 const PATH_ASYNC_INVOKE = '/v1/async-invoke';
+// Router reports the route it picked (e.g. a model id, or "fallback") in this response header.
+const ROUTER_ROUTE_HEADER = 'x-model-router-selected-route';
 
 const PUBLIC_CONFIG = {
   brandTitle: 'Inference Demo',
@@ -196,17 +198,40 @@ function readBody(req) {
   });
 }
 
+const UPSTREAM_TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS) || 120000;
+
 async function doFetch(path, init = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      'Content-Type': 'application/json',
-      ...(init.headers || {})
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), UPSTREAM_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...init,
+      signal: ac.signal,
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        ...(init.headers || {})
+      }
+    });
+    const text = await res.text();
+    return { status: res.status, text, routedRoute: res.headers.get(ROUTER_ROUTE_HEADER) };
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      return {
+        status: 504,
+        text: JSON.stringify({
+          error: 'upstream_timeout',
+          detail: `No response from ${BASE}${path} within ${UPSTREAM_TIMEOUT_MS} ms`
+        })
+      };
     }
-  });
-  const text = await res.text();
-  return { status: res.status, text };
+    return {
+      status: 502,
+      text: JSON.stringify({ error: 'upstream_fetch_failed', detail: String(e?.cause?.message || e?.message || e) })
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function handleModels(req, res) {
@@ -249,10 +274,14 @@ async function handleChat(req, res) {
   const t0 = Date.now();
   const r = await doFetch(PATH_CHAT, { method: 'POST', body });
   const latency_ms = Date.now() - t0;
-  res.writeHead(r.status, { 'Content-Type': 'application/json' });
+  res.writeHead(r.status, {
+    'Content-Type': 'application/json',
+    ...(r.routedRoute ? { [ROUTER_ROUTE_HEADER]: r.routedRoute } : {})
+  });
   try {
     const data = JSON.parse(r.text);
     data.latency_ms = latency_ms;
+    if (r.routedRoute) data.router_selected_route = r.routedRoute;
     res.end(JSON.stringify(data));
   } catch {
     res.end(JSON.stringify({ error: r.text, latency_ms }));
@@ -390,19 +419,19 @@ const server = createServer(async (req, res) => {
     const path = pathname(req);
     if (path === '/api/chat' && req.method === 'POST') {
       if (!requireSession(req, res)) return;
-      return handleChat(req, res);
+      return await handleChat(req, res);
     }
     if (path === '/api/compare' && req.method === 'POST') {
       if (!requireSession(req, res)) return;
-      return handleCompare(req, res);
+      return await handleCompare(req, res);
     }
     if (path === '/api/image' && req.method === 'POST') {
       if (!requireSession(req, res)) return;
-      return handleImage(req, res);
+      return await handleImage(req, res);
     }
     if (path === '/api/async-invoke' && req.method === 'POST') {
       if (!requireSession(req, res)) return;
-      return handleAsyncInvoke(req, res);
+      return await handleAsyncInvoke(req, res);
     }
     if (path.startsWith('/api/async-invoke/') && req.method === 'GET') {
       if (!requireSession(req, res)) return;
@@ -412,25 +441,37 @@ const server = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'not_found' }));
         return;
       }
-      if (parsed.kind === 'status') return handleAsyncInvokeStatus(req, res, parsed.id);
-      return handleAsyncInvokeResult(req, res, parsed.id);
+      if (parsed.kind === 'status') return await handleAsyncInvokeStatus(req, res, parsed.id);
+      return await handleAsyncInvokeResult(req, res, parsed.id);
     }
     if (path === '/api/models' && req.method === 'GET') {
       if (!requireSession(req, res)) return;
-      return handleModels(req, res);
+      return await handleModels(req, res);
     }
     if (path === '/api/config' && req.method === 'GET') return handleConfig(req, res);
-    if (path === '/api/session' && req.method === 'POST') return handleSession(req, res);
+    if (path === '/api/session' && req.method === 'POST') return await handleSession(req, res);
     if (path.startsWith('/api/')) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'unknown_api_route', path }));
       return;
     }
-    return serveStatic(req, res);
+    return await serveStatic(req, res);
   } catch (e) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: String(e) }));
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: String(e?.message || e) }));
+    } else {
+      res.end();
+    }
   }
+});
+
+// Safety net: never let a stray async rejection take down the demo server.
+process.on('unhandledRejection', (reason) => {
+  console.error('[si-demo] unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[si-demo] uncaughtException:', err);
 });
 
 server.listen(PORT, () => {
