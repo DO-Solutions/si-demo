@@ -176,7 +176,7 @@
         <div class="row">
           <div>
             <label for="r-max">Max tokens</label>
-            <input type="number" id="r-max" value="2048" min="16" max="4096" />
+            <input type="number" id="r-max" value="1024" min="16" max="4096" />
           </div>
           <div>
             <label for="r-temp">Temperature</label>
@@ -616,9 +616,9 @@
       }
       const msg = data.choices?.[0]?.message || {};
       const finish = data.choices?.[0]?.finish_reason;
-      let content = msg.content;
+      let content = decodeByteBpe(msg.content);
       if (!content && msg.reasoning_content) {
-        content = `[reasoning only · finish_reason=${finish}]\n\n${msg.reasoning_content}`;
+        content = `[reasoning only · finish_reason=${finish}]\n\n${decodeByteBpe(msg.reasoning_content)}`;
       }
       if (!content) content = '(no content)';
       const u = data.usage || {};
@@ -681,9 +681,9 @@
         } else {
           const m = res.data.choices[0].message || {};
           const finish = res.data.choices[0].finish_reason;
-          content = m.content;
+          content = decodeByteBpe(m.content);
           if (!content && m.reasoning_content) {
-            content = `[reasoning only · finish_reason=${finish}]\n\n${m.reasoning_content}`;
+            content = `[reasoning only · finish_reason=${finish}]\n\n${decodeByteBpe(m.reasoning_content)}`;
           }
           if (!content) content = '(no content)';
         }
@@ -711,6 +711,19 @@
 
   function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  // Byte-level BPE (GPT-2 style) tokenizers map whitespace bytes to printable
+  // glyphs: space→Ġ (U+0120), newline→Ċ (U+010A), tab→ĉ (U+0109). Some upstream
+  // models leak these undecoded into content / reasoning_content. Reverse them
+  // here, at render time only — never in the server proxy, where blindly
+  // rewriting bytes could corrupt legitimate text.
+  function decodeByteBpe(s) {
+    if (typeof s !== 'string' || !s) return s;
+    return s
+      .replace(/Ġ/g, ' ')
+      .replace(/Ċ/g, '\n')
+      .replace(/ĉ/g, '\t');
   }
 
   function refreshAudioModelSelect() {
@@ -843,7 +856,7 @@ print(expensive_items_eur)`
       const payload = {
         model: routerName,
         messages: [{ role: 'user', content: document.getElementById('r-prompt').value }],
-        max_completion_tokens: Number(document.getElementById('r-max').value) || 2048,
+        max_completion_tokens: Number(document.getElementById('r-max').value) || 1024,
         temperature: Number(document.getElementById('r-temp').value)
       };
       const t0 = performance.now();
@@ -872,9 +885,9 @@ print(expensive_items_eur)`
 
       const msg = data.choices?.[0]?.message || {};
       const finish = data.choices?.[0]?.finish_reason;
-      let content = msg.content;
+      let content = decodeByteBpe(msg.content);
       if (!content && msg.reasoning_content) {
-        content = `[reasoning only · finish_reason=${finish}]\n\n${msg.reasoning_content}`;
+        content = `[reasoning only · finish_reason=${finish}]\n\n${decodeByteBpe(msg.reasoning_content)}`;
       }
       if (!content) content = '(no content)';
 
